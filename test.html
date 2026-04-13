@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Oracle ✦ 鑑定テスト</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a14; color: #e8e0f0; font-family: 'Hiragino Kaku Gothic Pro', sans-serif; padding: 20px; }
+  h1 { text-align: center; color: #c9a0ff; margin-bottom: 24px; font-size: 1.4rem; letter-spacing: 0.1em; }
+  .form { background: #13132a; border: 1px solid #2a2a50; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  label { display: block; color: #a0a0c0; font-size: 0.85rem; margin-bottom: 4px; margin-top: 12px; }
+  input, select { width: 100%; background: #0a0a1e; border: 1px solid #3a3a60; border-radius: 6px; color: #e8e0f0; padding: 8px 12px; font-size: 0.95rem; }
+  .row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  button { margin-top: 20px; width: 100%; background: linear-gradient(135deg, #6a0dad, #3d0080); color: #fff; border: none; border-radius: 8px; padding: 12px; font-size: 1rem; cursor: pointer; letter-spacing: 0.05em; }
+  button:hover { opacity: 0.85; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .result { background: #13132a; border: 1px solid #2a2a50; border-radius: 12px; padding: 24px; margin-top: 20px; display: none; }
+  .result h2 { color: #c9a0ff; font-size: 1rem; margin-bottom: 16px; }
+  .reading { line-height: 1.9; font-size: 0.95rem; color: #d8d0e8; white-space: pre-wrap; }
+  .reading strong { color: #c9a0ff; }
+  .loading { text-align: center; color: #8080b0; padding: 40px; display: none; }
+  .error { color: #ff6080; padding: 12px; background: #2a0010; border-radius: 6px; margin-top: 12px; display: none; }
+</style>
+</head>
+<body>
+<h1>✦ The Oracle 鑑定テスト ✦</h1>
+<div class="form">
+  <div class="row">
+    <div><label>年</label><input type="number" id="year" value="2003"></div>
+    <div><label>月</label><input type="number" id="month" value="10" min="1" max="12"></div>
+    <div><label>日</label><input type="number" id="day" value="5" min="1" max="31"></div>
+  </div>
+  <div class="row">
+    <div><label>時</label><input type="number" id="hour" value="20" min="0" max="23"></div>
+    <div><label>分</label><input type="number" id="minute" value="8" min="0" max="59"></div>
+    <div><label>タイムゾーン</label><input type="number" id="tz" value="9" step="0.5"></div>
+  </div>
+  <div class="row">
+    <div><label>緯度</label><input type="number" id="lat" value="36.34" step="0.01"></div>
+    <div><label>経度</label><input type="number" id="lon" value="140.45" step="0.01"></div>
+    <div></div>
+  </div>
+  <label>質問</label>
+  <select id="qid">
+    <option value="destiny_1">運命・使命 ①</option>
+    <option value="destiny_2">運命・使命 ②</option>
+    <option value="career_1">仕事・キャリア ①</option>
+    <option value="career_2">仕事・キャリア ②</option>
+    <option value="career_3">仕事・キャリア ③</option>
+    <option value="money_1">金運・財運 ①</option>
+    <option value="money_2">金運・財運 ②</option>
+    <option value="love_1">恋愛 ①</option>
+    <option value="love_2">恋愛 ②</option>
+    <option value="timing_1">時期・タイミング ①</option>
+    <option value="timing_2">時期・タイミング ②</option>
+    <option value="selfknowledge_1">自己理解 ①</option>
+    <option value="obstacle_1">障害・試練 ①</option>
+    <option value="talent_1">才能・創造性 ①</option>
+    <option value="spiritual_1">精神・スピリチュアル ①</option>
+  </select>
+  <button id="btn" onclick="generate()">✦ 鑑定を受ける</button>
+  <div class="error" id="error"></div>
+</div>
+<div class="loading" id="loading">✦ 星の配置を読み解いています... ✦</div>
+<div class="result" id="result">
+  <h2 id="result-title"></h2>
+  <div class="reading" id="reading"></div>
+</div>
+<script>
+async function generate() {
+  const btn = document.getElementById('btn');
+  const loading = document.getElementById('loading');
+  const result = document.getElementById('result');
+  const errorEl = document.getElementById('error');
+  btn.disabled = true;
+  loading.style.display = 'block';
+  result.style.display = 'none';
+  errorEl.style.display = 'none';
+  try {
+    const birthData = {
+      year: parseInt(document.getElementById('year').value),
+      month: parseInt(document.getElementById('month').value),
+      day: parseInt(document.getElementById('day').value),
+      hour: parseInt(document.getElementById('hour').value),
+      minute: parseInt(document.getElementById('minute').value),
+      tzOffset: parseFloat(document.getElementById('tz').value),
+      lat: parseFloat(document.getElementById('lat').value),
+      lon: parseFloat(document.getElementById('lon').value),
+    };
+    const questionId = document.getElementById('qid').value;
+    const res = await fetch('/api/reading', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ birthData, questionId }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+    const formatted = data.reading
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^##\s+(.+)$/gm, '<strong>$1</strong>');
+    const nk = data.astroSummary?.moon?.nakshatra || '';
+    const lg = data.astroSummary?.lagna?.sign || '';
+    document.getElementById('result-title').textContent = `${nk} / ${lg}ラグナ`;
+    document.getElementById('reading').innerHTML = formatted;
+    result.style.display = 'block';
+    result.scrollIntoView({ behavior: 'smooth' });
+  } catch (e) {
+    errorEl.textContent = 'エラー: ' + e.message;
+    errorEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    loading.style.display = 'none';
+  }
+}
+</script>
+</body>
+</html>
