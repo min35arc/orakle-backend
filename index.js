@@ -1,0 +1,114 @@
+require('dotenv').config();
+const express = require('express');
+const cors    = require('cors');
+const { calculateFullDasha } = require('./dasha');
+const { generateReading }    = require('./reading');
+const { GENRES }             = require('./questions');
+
+const app  = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(cors());
+app.use(express.json());
+
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'The Oracle ✦ 魂の設計図' });
+});
+
+app.get('/api/questions', (req, res) => {
+  res.json({ genres: GENRES });
+});
+
+app.get('/api/test-dasha', async (req, res) => {
+  try {
+    const { year=1990, month=1, day=1, hour=12, minute=0, tz=9, lat, lon } = req.query;
+    const birthData = {
+      year: parseInt(year), month: parseInt(month), day: parseInt(day),
+      hour: parseInt(hour), minute: parseInt(minute), tzOffset: parseFloat(tz),
+      lat: lat !== undefined ? parseFloat(lat) : undefined,
+      lon: lon !== undefined ? parseFloat(lon) : undefined,
+    };
+    const result = await calculateFullDasha(birthData);
+    res.json({
+      ok: true,
+      moon: result.astro.moon, lagna: result.astro.lagna, planets: result.astro.planets,
+      currentDasha: {
+        maha: result.currentDasha.current?.lordName ?? null,
+        antar: result.currentDasha.currentAntar?.lordName ?? null,
+        mahaEnd: result.currentDasha.current?.endDate ?? null,
+        antarEnd: result.currentDasha.currentAntar?.endDate ?? null,
+        remainingMahaDays: result.currentDasha.current?.remainingDays ?? null,
+        remainingAntarDays: result.currentDasha.currentAntar?.remainingDays ?? null,
+        nextAntar: result.currentDasha.nextAntar?.lordName ?? null,
+        nextAntarStart: result.currentDasha.nextAntar?.startDate ?? null,
+      },
+      upcoming: result.upcoming,
+      allMahadashas: result.allMahadashas.map(m => ({
+        lord: m.lordName, start: m.startDate, end: m.endDate, years: m.durationYears,
+      })),
+      summaryForAI: result.summaryForAI,
+    });
+  } catch (err) {
+    console.error('dasha error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ブラウザテスト用 GET
+app.get('/api/test-reading', async (req, res) => {
+  try {
+    const { year=2003, month=10, day=5, hour=20, minute=8, tz=9,
+            lat=36.34, lon=140.45, qid='destiny_1' } = req.query;
+    const birthData = {
+      year: parseInt(year), month: parseInt(month), day: parseInt(day),
+      hour: parseInt(hour), minute: parseInt(minute), tzOffset: parseFloat(tz),
+      lat: parseFloat(lat), lon: parseFloat(lon),
+    };
+    const dashaResult = await calculateFullDasha(birthData);
+    const readingText = await generateReading(
+      qid,
+      dashaResult.summaryForAI,
+      dashaResult.astro,
+      dashaResult.currentDasha,
+      {}
+    );
+    res.json({ ok: true, questionId: qid, reading: readingText });
+  } catch (err) {
+    console.error('test-reading error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// 本番用 POST
+app.post('/api/reading', async (req, res) => {
+  try {
+    const { birthData, questionId, freeText } = req.body;
+    if (!birthData || !questionId) {
+      return res.status(400).json({ ok: false, error: 'birthData と questionId は必須です' });
+    }
+    const dashaResult = await calculateFullDasha(birthData);
+    const readingText = await generateReading(
+      questionId,
+      dashaResult.summaryForAI,
+      dashaResult.astro,
+      dashaResult.currentDasha,
+      { freeText }
+    );
+    res.json({
+      ok: true, questionId, reading: readingText,
+      astroSummary: {
+        moon: dashaResult.astro.moon, lagna: dashaResult.astro.lagna,
+        currentDasha: {
+          maha: dashaResult.currentDasha.current?.lordName ?? null,
+          antar: dashaResult.currentDasha.currentAntar?.lordName ?? null,
+          mahaEnd: dashaResult.currentDasha.current?.endDate ?? null,
+        },
+      },
+    });
+  } catch (err) {
+    console.error('reading error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.listen(PORT, () => console.log(`The Oracle running on port ${PORT}`));
